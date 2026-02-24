@@ -1,0 +1,166 @@
+name: npm-build-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run identifier"
+        required: false
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.js'
+      - 'scripts/**'
+      - 'dist/**'
+      - '.github/workflows/build-npm-publish-jfrog.yml'
+
+jobs:
+  build-and-publish-npm:
+    #runs-on: self-hosted
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      digest: ${{ steps.digest.outputs.digest }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Set unique version for this run
+        id: version
+        run: |
+          VERSION="1.0.0-run.${{ github.run_number }}"
+          npm pkg set version="${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Publishing version: ${VERSION}"
+      - name: Build npm package
+        run: npm run build
+
+      - name: Pack npm package
+        id: pack
+        run: |
+          npm pack
+          PACK_TARBALL=$(ls *.tgz)
+          echo "tarball=${PACK_TARBALL}" >> $GITHUB_OUTPUT
+          echo "Packed: ${PACK_TARBALL}"
+      - name: Publish to GitHub Packages
+        id: publish
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          registry: https://npm.pkg.github.com
+          access: public
+
+      - name: Compute tarball digest for attestation
+        id: digest
+        run: |
+          TARBALL="${{ steps.pack.outputs.tarball }}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            DIGEST=$(sha256sum "${TARBALL}" | awk '{print $1}')
+          else
+            DIGEST=$(shasum -a 256 "${TARBALL}" | awk '{print $1}')
+          fi
+          echo "digest=sha256:${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Tarball digest: sha256:${DIGEST}"
+     
+      # - name: Attest npm package (build provenance)
+      #   uses: actions/attest-build-provenance@v3.2.0
+      #   with:
+      #     subject-name: "npm/${{ github.repository }}@${{ steps.version.outputs.version }}"
+      #     subject-digest: ${{ steps.digest.outputs.digest }}          
+      #     push-to-registry: true    
+      - name: Set up JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: 2.92.0
+          custom-server-id: productdemo
+        env:
+          # JF_URL: https://z0artifactviewdev1.jfrogdev.org
+          # JF_ACCESS_TOKEN: ${{ secrets.JFROG_TEST_TOKEN }}
+          JF_URL:  ${{ secrets.JFROG_PLATFORM_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+
+      - name: Upload npm package to JFrog Artifactory
+        run: |
+          jfrog --version
+          TARBALL="${{ steps.pack.outputs.tarball }}"
+          
+         
+          echo "Uploaded ${TARBALL} to JFrog Artifactory"
+          #jfrog rt upload "${TARBALL}" "github-federated/" --server-id=productdemo
+          jfrog rt upload "${TARBALL}" "npm-local/" --server-id=productdemo
+           # jfrog rt upload "${TARBALL}" "github-npm-project-local/" --server-id=productdemo
+          #jfrog rt upload "${TARBALL}" "github-generic/" --server-id=productdemo
+  
+  get-linked-artifact-details:
+    name: Get and print GitHub linked artifact details
+    runs-on: ubuntu-latest
+    needs: build-and-publish-npm
+    permissions:
+      contents: read
+      artifact-metadata: read
+
+    steps:
+      - name: Get GitHub linked artifact details
+        id: get-artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          DIGEST: ${{ needs.build-and-publish-npm.outputs.digest }}
+        run: |
+          set -e
+          # subject_digest must be URL-encoded for the path
+          ENCODED_DIGEST=$(echo -n "$DIGEST" | jq -sRr @uri)
+          echo "=============================================="
+          echo "GitHub linked artifact – build summary"
+          echo "=============================================="
+          echo "Package:     @jfrog-playground/test-artifact-view"
+          echo "Version:     ${{ needs.build-and-publish-npm.outputs.version }}"
+          echo "Tarball:     ${{ needs.build-and-publish-npm.outputs.tarball }}"
+          echo "Digest:      $DIGEST"
+          echo "Repository:  ${{ github.repository }}"
+          echo "Run ID:      ${{ github.run_id }}"
+          echo "Run number: ${{ github.run_number }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "=============================================="
+          echo ""
+          echo "=============================================="
+          echo "Storage records (GET /orgs/{org}/artifacts/{digest}/metadata/storage-records)"
+          echo "=============================================="
+          STORAGE=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/orgs/${ORG}/artifacts/${ENCODED_DIGEST}/metadata/storage-records" 2>/dev/null || echo '{"storage_records":[],"total_count":0}')
+          echo "$STORAGE" | jq .
+          echo "storage_records<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$STORAGE" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "=============================================="
+          echo "Deployment records (GET /orgs/{org}/artifacts/{digest}/metadata/deployment-records)"
+          echo "=============================================="
+          DEPLOY=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/orgs/${ORG}/artifacts/${ENCODED_DIGEST}/metadata/deployment-records" 2>/dev/null || echo '{"deployment_records":[],"total_count":0}')
+          echo "$DEPLOY" | jq .
+          echo "deployment_records<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "=============================================="
+          echo "All linked artifact details printed above."
+          echo "=============================================="
