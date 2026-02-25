@@ -110,4 +110,4 @@ jobs:
           jfrog docker push "$JFROG_IMAGE" --server-id=productdemo
           echo '-----'
           jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
-          jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo//test/${RUN_ID}/ --server-id=productdemo
+          jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo/test/${RUN_ID}/ --server-id=productdemo
