@@ -1,5 +1,5 @@
 {
-  "name": "@jfrog-playground/test-artifact-view",
+  "name": "@jfrog-playground/artifactory",
   "version": "1.0.0",
   "description": "NPM package built and published to JFrog Artifactory and GitHub Packages",
   "main": "index.js",
@@ -13,7 +13,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/jfrog-playground/test_artifact_view"
+    "url": "https://github.com/jfrog-playground/artifactory"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
