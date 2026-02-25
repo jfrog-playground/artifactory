@@ -104,10 +104,10 @@ jobs:
 
           # jf rt u ./test/${RUN_ID}/manifest.json ${REPO_NAME}/${DIGEST}/ --server-id=productdemo
 
-          docker pull --platform linux/amd64 "$IMAGE_REF"
+          #docker pull --platform linux/amd64 "$IMAGE_REF"
           docker tag "$IMAGE_REF" "$JFROG_IMAGE"
           docker tag "$JFROG_IMAGE" "$JFROG_LATEST"
           jfrog docker push "$JFROG_IMAGE" --server-id=productdemo
           echo '-----'
-          jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
-          jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo/test/${RUN_ID}/ --server-id=productdemo
+          # jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
+          # jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo/test/${RUN_ID}/ --server-id=productdemo
