@@ -1,0 +1,22 @@
+{
+  "name": "@jfrog-playground/test-artifact-view",
+  "version": "1.0.0",
+  "description": "NPM package built and published to JFrog Artifactory and GitHub Packages",
+  "main": "index.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "prepack": "npm run build"
+  },
+  "files": [
+    "dist",
+    "index.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jfrog-playground/test_artifact_view"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "license": "Apache-2.0"
+}
