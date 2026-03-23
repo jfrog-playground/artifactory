@@ -1,2 +1,2 @@
 FROM alpine:latest
-pwd
+FROM python:3.11-slim
