@@ -76,3 +76,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}   # or the org/user that owns the PAT
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to JFrog
+        run: |
+          IMAGE_REF="${{ steps.vars.outputs.image_ref }}"
+          RUN_ID="${{ github.event.inputs.id || github.sha }}"
+          JFROG_IMAGE="productdemo.jfrog.io/sha-docker-repo/test:${RUN_ID}"
+          JFROG_LATEST="productdemo.jfrog.io/sha-docker-repo/org:latest"
+
+          # Image was built on ubuntu-latest (linux/amd64); pull that platform on arm64 runners
+          # docker pull --platform linux/amd64 "$IMAGE_REF"
+          docker tag "$IMAGE_REF" "$JFROG_IMAGE"
+          docker tag "$JFROG_IMAGE" "$JFROG_LATEST"
+          
+          jfrog docker push "$JFROG_IMAGE" --server-id=productdemo
+          # jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
+          # jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo//test/${RUN_ID}/ --server-id=productdemo    
