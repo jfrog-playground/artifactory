@@ -92,24 +92,24 @@ jobs:
           version: 2.92.0
           custom-server-id: productdemo
         env:
-          # JF_URL: ${{ env.JF_URL }}
-          # JF_ACCESS_TOKEN: ${{ env.JF_ACCESS_TOKEN }}
-          JF_URL:  ${{ secrets.JFROG_TEST_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JFROG_TEST_TOKEN }}
+          JF_URL:  ${{ secrets.JFROG_PLATFORM_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+          # JF_URL:  ${{ secrets.JFROG_TEST_URL }}
+          # JF_ACCESS_TOKEN: ${{ secrets.JFROG_TEST_TOKEN }}
 
-      - name: Push to JFrog
-        run: |
-          IMAGE_REF="${{ needs.build.outputs.image_ref }}"
-          RUN_ID="${{ github.event.inputs.id || github.sha }}"
-          JFROG_IMAGE="productdemo.jfrog.io/github-artifact-view/test:${RUN_ID}"
-          JFROG_LATEST="productdemo.jfrog.io/github-artifact-view/org:latest"
+      # - name: Push to JFrog
+      #   run: |
+      #     IMAGE_REF="${{ needs.build.outputs.image_ref }}"
+      #     RUN_ID="${{ github.event.inputs.id || github.sha }}"
+      #     JFROG_IMAGE="productdemo.jfrog.io/github-artifact-view/test:${RUN_ID}"
+      #     JFROG_LATEST="productdemo.jfrog.io/github-artifact-view/org:latest"
 
-          # jf rt u ./test/${RUN_ID}/manifest.json ${REPO_NAME}/${DIGEST}/ --server-id=productdemo
+      #     # jf rt u ./test/${RUN_ID}/manifest.json ${REPO_NAME}/${DIGEST}/ --server-id=productdemo
 
-          #docker pull --platform linux/amd64 "$IMAGE_REF"
-          docker tag "$IMAGE_REF" "$JFROG_IMAGE"
-          docker tag "$JFROG_IMAGE" "$JFROG_LATEST"
-          jfrog docker push "$JFROG_IMAGE" --server-id=productdemo
-          echo '-----'
-          # jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
-          # jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo/test/${RUN_ID}/ --server-id=productdemo
+      #     #docker pull --platform linux/amd64 "$IMAGE_REF"
+      #     docker tag "$IMAGE_REF" "$JFROG_IMAGE"
+      #     docker tag "$JFROG_IMAGE" "$JFROG_LATEST"
+      #     jfrog docker push "$JFROG_IMAGE" --server-id=productdemo
+      #     echo '-----'
+      #     # jf rt dl github-artifact-view/test/${RUN_ID}/manifest.json . --server-id=productdemo
+      #     # jf rt u ./test/${RUN_ID}/manifest.json sha-docker-repo/test/${RUN_ID}/ --server-id=productdemo
