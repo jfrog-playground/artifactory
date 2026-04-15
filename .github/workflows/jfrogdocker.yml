@@ -57,13 +57,24 @@ jobs:
             -t "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" \
             docker
        
-      - name: Resolve digest for attestation
+       - name: Resolve digest for attestation
         id: meta
+        env:
+          IMG: productdemo.jfrog.io/github-artifact-view/test:${{ env.IMAGE_TAG }}
         run: |
-          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" | sed 's/.*@//')"
-          test -n "$DIGEST"
+          set -euo pipefail
+          # Reads manifest digest from the registry (requires registry auth in ~/.docker/config.json)
+          DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Manifest.Digest}}')"
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "<no value>" ]; then
+            DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Digest}}')"
+          fi
+          case "$DIGEST" in sha256:*) ;; *)
+            echo "Could not resolve digest for $IMG (got: '$DIGEST')" >&2
+            exit 1
+            ;;
+          esac
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "image_ref=${{ env.SUBJECT_NAME }}@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image_ref=productdemo.jfrog.io/github-artifact-view/test@${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance (GitHub)
         if: steps.meta.outputs.digest != ''
