@@ -48,9 +48,7 @@ jobs:
           JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
-      - name: Configure Docker for Artifactory (JFrog CLI)
-        run: jf docker-config --server-id-resolve=productdemo --server-id-deploy=productdemo
-
+     
       - name: Build image (JFrog CLI)
         run: |
           jf docker build \
