@@ -1,0 +1,83 @@
+name: jfrog-docker-build-upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "run identifier"
+        required: false
+      repo_name:
+        description: "Repo name (used in sha-docker-repo path)"
+        required: true  
+      runner:
+        description: "Run on"
+        required: true
+        default: ubuntu-latest
+        type: choice
+        options:
+          - ubuntu-latest
+          - self-hosted
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      packages: write
+      contents: read
+      attestations: write
+      artifact-metadata: write
+
+    env:
+      # Artifactory Docker image (no tag in subject-name for attest; use digest)
+      SUBJECT_NAME: productdemo.jfrog.io/github-artifact-view/test
+      IMAGE_TAG: ${{ github.event.inputs.id || github.sha }}
+
+    outputs:
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      digest: ${{ steps.meta.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: 2.92.0
+          custom-server-id: productdemo
+        env:
+          JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+
+      - name: Configure Docker for Artifactory (JFrog CLI)
+        run: jf docker-config --server-id-resolve=productdemo --server-id-deploy=productdemo
+
+      - name: Build image (JFrog CLI)
+        run: |
+          jf docker build \
+            --server-id=productdemo \
+            -f docker/docker.Dockerfile \
+            -t "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" \
+            docker
+       
+      - name: Resolve digest for attestation
+        id: meta
+        run: |
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" | sed 's/.*@//')"
+          test -n "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${{ env.SUBJECT_NAME }}@$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance (GitHub)
+        if: steps.meta.outputs.digest != ''
+        uses: actions/attest-build-provenance@v3.2.0
+        with:
+          subject-name: ${{ env.SUBJECT_NAME }}
+          subject-digest: ${{ steps.meta.outputs.digest }}
+          push-to-registry: false
+          
+      - name: Push image with JFrog CLI
+        id: push
+        run: |
+          jf docker push "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" --server-id=productdemo
+
+    
