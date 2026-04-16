@@ -47,6 +47,7 @@ jobs:
         with:
           version: 2.92.0
           custom-server-id: productdemo
+          disable-auto-evidence-collection: true
         env:
           JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
@@ -106,6 +107,7 @@ jobs:
         with:
           version: 2.92.0
           custom-server-id: productdemo
+          disable-auto-evidence-collection: true
         env:
           JF_URL: ${{ env.JF_URL }}
           JF_ACCESS_TOKEN: ${{ env.JF_ACCESS_TOKEN }}
@@ -116,7 +118,7 @@ jobs:
       - name: Pull published image
         run: docker pull "${{ needs.build.outputs.image_ref }}"
 
-      - name: Use repo_name (example)
+      - name: Use repo_name (replace with real jf rt steps)
         run: |
           echo "repo_name=${{ github.event.inputs.repo_name }}"
           echo "image_ref=${{ needs.build.outputs.image_ref }}"
