@@ -33,6 +33,7 @@ jobs:
     env:
       SUBJECT_NAME: productdemo.jfrog.io/github-artifact-view/test
       IMAGE_TAG: ${{ github.event.inputs.id != '' && github.event.inputs.id || github.sha }}
+      FULL_IMAGE: productdemo.jfrog.io/github-artifact-view/test:${{ github.event.inputs.id != '' && github.event.inputs.id || github.sha }}
 
     outputs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
@@ -57,29 +58,29 @@ jobs:
           jf docker build \
             --server-id=productdemo \
             -f docker/docker.Dockerfile \
-            -t "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" \
+            -t "${{ env.FULL_IMAGE }}" \
             docker
 
       - name: Push image (JFrog CLI)
         id: push
         run: |
-          jf docker push "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" --server-id=productdemo
+          jf docker push "${{ env.FULL_IMAGE }}" --server-id=productdemo
 
       - name: Resolve digest for attestation
         id: meta
-        env:
-          IMG: ${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}
         run: |
           set -euo pipefail
-          DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Manifest.Digest}}')"
+          echo "Resolving digest for: ${{ env.FULL_IMAGE }}"
+          DIGEST="$(docker buildx imagetools inspect "${{ env.FULL_IMAGE }}" --format '{{.Manifest.Digest}}')"
           if [ -z "$DIGEST" ] || [ "$DIGEST" = "<no value>" ]; then
-            DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Digest}}')"
+            DIGEST="$(docker buildx imagetools inspect "${{ env.FULL_IMAGE }}" --format '{{.Digest}}')"
           fi
           case "$DIGEST" in sha256:*) ;; *)
-            echo "Could not resolve digest for $IMG (got: '$DIGEST')" >&2
+            echo "Could not resolve digest for ${{ env.FULL_IMAGE }} (got: '$DIGEST')" >&2
             exit 1
             ;;
           esac
+          echo "manifest digest: $DIGEST"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "image_ref=${{ env.SUBJECT_NAME }}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
@@ -118,7 +119,7 @@ jobs:
       - name: Pull published image
         run: docker pull "${{ needs.build.outputs.image_ref }}"
 
-      - name: Use repo_name (replace with real jf rt steps)
+      - name: Use repo_name (replace with your jf rt commands)
         run: |
           echo "repo_name=${{ github.event.inputs.repo_name }}"
           echo "image_ref=${{ needs.build.outputs.image_ref }}"
