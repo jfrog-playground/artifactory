@@ -4,13 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       id:
-        description: "run identifier"
+        description: "Run identifier (image tag); defaults to commit SHA if empty"
         required: false
+        type: string
       repo_name:
-        description: "Repo name (used in sha-docker-repo path)"
-        required: true  
+        description: "Repo name (e.g. for sha-docker-repo / RT paths)"
+        required: true
+        type: string
       runner:
-        description: "Run on"
+        description: "Runner for follow-up job"
         required: true
         default: ubuntu-latest
         type: choice
@@ -29,18 +31,19 @@ jobs:
       artifact-metadata: write
 
     env:
-      # Artifactory Docker image (no tag in subject-name for attest; use digest)
       SUBJECT_NAME: productdemo.jfrog.io/github-artifact-view/test
-      IMAGE_TAG: ${{ github.event.inputs.id || github.sha }}
+      IMAGE_TAG: ${{ github.event.inputs.id != '' && github.event.inputs.id || github.sha }}
 
     outputs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       digest: ${{ steps.meta.outputs.digest }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: jfrog/setup-jfrog-cli@v4
+      - name: Set up JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
         with:
           version: 2.92.0
           custom-server-id: productdemo
@@ -48,7 +51,6 @@ jobs:
           JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
-     
       - name: Build image (JFrog CLI)
         run: |
           jf docker build \
@@ -56,14 +58,18 @@ jobs:
             -f docker/docker.Dockerfile \
             -t "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" \
             docker
-       
-       - name: Resolve digest for attestation
+
+      - name: Push image (JFrog CLI)
+        id: push
+        run: |
+          jf docker push "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" --server-id=productdemo
+
+      - name: Resolve digest for attestation
         id: meta
         env:
-          IMG: productdemo.jfrog.io/github-artifact-view/test:${{ env.IMAGE_TAG }}
+          IMG: ${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}
         run: |
           set -euo pipefail
-          # Reads manifest digest from the registry (requires registry auth in ~/.docker/config.json)
           DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Manifest.Digest}}')"
           if [ -z "$DIGEST" ] || [ "$DIGEST" = "<no value>" ]; then
             DIGEST="$(docker buildx imagetools inspect "$IMG" --format '{{.Digest}}')"
@@ -74,7 +80,7 @@ jobs:
             ;;
           esac
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "image_ref=productdemo.jfrog.io/github-artifact-view/test@${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${{ env.SUBJECT_NAME }}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance (GitHub)
         if: steps.meta.outputs.digest != ''
@@ -83,10 +89,35 @@ jobs:
           subject-name: ${{ env.SUBJECT_NAME }}
           subject-digest: ${{ steps.meta.outputs.digest }}
           push-to-registry: false
-          
-      - name: Push image with JFrog CLI
-        id: push
-        run: |
-          jf docker push "${{ env.SUBJECT_NAME }}:${{ env.IMAGE_TAG }}" --server-id=productdemo
 
-    
+  jfrog:
+    needs: build
+    runs-on: ${{ github.event.inputs.runner }}
+    permissions:
+      contents: read
+
+    env:
+      JF_URL: ${{ github.event.inputs.runner == 'self-hosted' && secrets.JFROG_TEST_URL || secrets.JFROG_PLATFORM_URL }}
+      JF_ACCESS_TOKEN: ${{ github.event.inputs.runner == 'self-hosted' && secrets.JFROG_TEST_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
+
+    steps:
+      - name: Set up JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: 2.92.0
+          custom-server-id: productdemo
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ env.JF_ACCESS_TOKEN }}
+
+      - name: Log in Docker to Artifactory
+        run: jf docker login productdemo.jfrog.io --server-id=productdemo
+
+      - name: Pull published image
+        run: docker pull "${{ needs.build.outputs.image_ref }}"
+
+      - name: Use repo_name (example)
+        run: |
+          echo "repo_name=${{ github.event.inputs.repo_name }}"
+          echo "image_ref=${{ needs.build.outputs.image_ref }}"
+          echo "digest=${{ needs.build.outputs.digest }}"
